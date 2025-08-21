@@ -98,7 +98,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     // Add a timeout to prevent infinite loading
     const timeout = setTimeout(() => {
       if (loading) {
-        console.log("Loading timeout reached, setting loading to false")
+        // Loading timeout reached, setting loading to false
         setLoading(false)
       }
     }, 10000) // 10 second timeout

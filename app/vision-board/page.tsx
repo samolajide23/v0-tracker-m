@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSupabase } from "@/lib/supabase-context"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -81,103 +82,27 @@ const goalCategories = [
 ]
 
 export default function VisionBoardPage() {
-  const [goals, setGoals] = useState<VisionGoal[]>([
-    {
-      id: "1",
-      title: "Achieve Financial Independence",
-      description: "Build enough passive income to cover all living expenses",
-      category: "Financial",
-      targetDate: "2030-12-31",
-      priority: "high",
-      status: "in-progress",
-      milestones: ["Save $100k", "Invest in index funds", "Build emergency fund", "Pay off all debt"],
-      color: "#10b981",
-      icon: DollarSign,
-    },
-    {
-      id: "2",
-      title: "Get Promoted to Senior Manager",
-      description: "Advance my career and take on more leadership responsibilities",
-      category: "Career",
-      targetDate: "2025-06-01",
-      priority: "high",
-      status: "in-progress",
-      milestones: ["Complete leadership training", "Lead major project", "Expand team", "Improve performance metrics"],
-      color: "#8b5cf6",
-      icon: Briefcase,
-    },
-    {
-      id: "3",
-      title: "Run a Marathon",
-      description: "Complete a full 26.2 mile marathon race",
-      category: "Health",
-      targetDate: "2025-10-01",
-      priority: "medium",
-      status: "not-started",
-      milestones: ["Run 5K consistently", "Complete 10K race", "Build to half marathon", "Train for full marathon"],
-      color: "#ef4444",
-      icon: Dumbbell,
-    },
-  ])
+  const { data, user, loading } = useSupabase()
+  const [goals, setGoals] = useState<VisionGoal[]>([])
+  const [habits, setHabits] = useState<Habit[]>([])
+  const [inspirations, setInspirations] = useState<Inspiration[]>([])
 
-  const [habits, setHabits] = useState<Habit[]>([
-    {
-      id: "1",
-      name: "Morning Meditation",
-      category: "Health",
-      frequency: "daily",
-      streak: 12,
-      completedDates: [],
-      color: "#ef4444",
-    },
-    {
-      id: "2",
-      name: "Read for 30 minutes",
-      category: "Education",
-      frequency: "daily",
-      streak: 8,
-      completedDates: [],
-      color: "#f59e0b",
-    },
-    {
-      id: "3",
-      name: "Review weekly budget",
-      category: "Financial",
-      frequency: "weekly",
-      streak: 4,
-      completedDates: [],
-      color: "#10b981",
-    },
-  ])
-
-  const [inspirations, setInspirations] = useState<Inspiration[]>([
-    {
-      id: "1",
-      type: "quote",
-      content: "The future belongs to those who believe in the beauty of their dreams.",
-      author: "Eleanor Roosevelt",
-      category: "Personal",
-    },
-    {
-      id: "2",
-      type: "quote",
-      content: "Success is not final, failure is not fatal: it is the courage to continue that counts.",
-      author: "Winston Churchill",
-      category: "Career",
-    },
-    {
-      id: "3",
-      type: "quote",
-      content: "Your body can do it. It's your mind you have to convince.",
-      author: "Unknown",
-      category: "Health",
-    },
-  ])
+  // Load data from Supabase context
+  useEffect(() => {
+    if (data?.visionBoard) {
+      setGoals(data.visionBoard.goals?.map(goal => ({
+        ...goal,
+        icon: goalCategories.find(cat => cat.name === goal.category)?.icon || Heart
+      })) || [])
+      setHabits(data.visionBoard.habits || [])
+      setInspirations(data.visionBoard.inspirations || [])
+    }
+  }, [data?.visionBoard])
 
   const [newGoal, setNewGoal] = useState({
     title: "",
     description: "",
-    category: "Personal",
+    category: "Financial",
     targetDate: "",
     priority: "medium" as const,
     milestones: "",
@@ -197,102 +122,111 @@ export default function VisionBoardPage() {
   })
 
   const addGoal = () => {
-    if (newGoal.title && newGoal.description && newGoal.targetDate) {
-      const category = goalCategories.find((cat) => cat.name === newGoal.category) || goalCategories[6]
-      const goal: VisionGoal = {
-        id: Date.now().toString(),
-        title: newGoal.title,
-        description: newGoal.description,
-        category: newGoal.category,
-        targetDate: newGoal.targetDate,
-        priority: newGoal.priority,
-        status: "not-started",
-        milestones: newGoal.milestones
-          .split(",")
-          .map((m) => m.trim())
-          .filter(Boolean),
-        color: category.color,
-        icon: category.icon,
-      }
-
-      setGoals([...goals, goal])
-      setNewGoal({
-        title: "",
-        description: "",
-        category: "Personal",
-        targetDate: "",
-        priority: "medium",
-        milestones: "",
-      })
+    if (!newGoal.title || !newGoal.description || !newGoal.targetDate) {
+      return
     }
+
+    const category = goalCategories.find((cat) => cat.name === newGoal.category)
+    const goal: VisionGoal = {
+      id: crypto.randomUUID(),
+      title: newGoal.title,
+      description: newGoal.description,
+      category: newGoal.category,
+      targetDate: newGoal.targetDate,
+      priority: newGoal.priority,
+      status: "not-started",
+      milestones: newGoal.milestones
+        .split(",")
+        .map((m) => m.trim())
+        .filter(Boolean),
+      color: category?.color || "#6366f1",
+      icon: category?.icon || Heart,
+    }
+
+    setGoals([...goals, goal])
+    setNewGoal({
+      title: "",
+      description: "",
+      category: "Financial",
+      targetDate: "",
+      priority: "medium",
+      milestones: "",
+    })
   }
 
   const addHabit = () => {
-    if (newHabit.name) {
-      const category = goalCategories.find((cat) => cat.name === newHabit.category) || goalCategories[6]
-      const habit: Habit = {
-        id: Date.now().toString(),
-        name: newHabit.name,
-        category: newHabit.category,
-        frequency: newHabit.frequency,
-        streak: 0,
-        completedDates: [],
-        color: category.color,
-      }
-
-      setHabits([...habits, habit])
-      setNewHabit({ name: "", category: "Personal", frequency: "daily" })
+    if (!newHabit.name) {
+      return
     }
+
+    const habit: Habit = {
+      id: crypto.randomUUID(),
+      name: newHabit.name,
+      category: newHabit.category,
+      frequency: newHabit.frequency,
+      streak: 0,
+      completedDates: [],
+      color: goalCategories.find((cat) => cat.name === newHabit.category)?.color || "#6366f1",
+    }
+
+    setHabits([...habits, habit])
+    setNewHabit({ name: "", category: "Personal", frequency: "daily" })
   }
 
   const addInspiration = () => {
-    if (newInspiration.content) {
-      const inspiration: Inspiration = {
-        id: Date.now().toString(),
-        type: newInspiration.type,
-        content: newInspiration.content,
-        author: newInspiration.author || undefined,
-        category: newInspiration.category,
-      }
-
-      setInspirations([...inspirations, inspiration])
-      setNewInspiration({ type: "quote", content: "", author: "", category: "Personal" })
+    if (!newInspiration.content) {
+      return
     }
-  }
 
-  const toggleGoalStatus = (goalId: string) => {
-    setGoals(
-      goals.map((goal) => {
-        if (goal.id === goalId) {
-          const statusOrder = ["not-started", "in-progress", "completed"]
-          const currentIndex = statusOrder.indexOf(goal.status)
-          const nextIndex = (currentIndex + 1) % statusOrder.length
-          return { ...goal, status: statusOrder[nextIndex] as any }
-        }
-        return goal
-      }),
-    )
+    const inspiration: Inspiration = {
+      id: crypto.randomUUID(),
+      type: newInspiration.type,
+      content: newInspiration.content,
+      author: newInspiration.author || undefined,
+      category: newInspiration.category,
+    }
+
+    setInspirations([...inspirations, inspiration])
+    setNewInspiration({ type: "quote", content: "", author: "", category: "Personal" })
   }
 
   const toggleHabitCompletion = (habitId: string) => {
     const today = new Date().toISOString().split("T")[0]
-    setHabits(
-      habits.map((habit) => {
-        if (habit.id === habitId) {
-          const isCompleted = habit.completedDates.includes(today)
-          const newCompletedDates = isCompleted
-            ? habit.completedDates.filter((date) => date !== today)
-            : [...habit.completedDates, today]
+    const habit = habits.find((h) => h.id === habitId)
+    if (!habit) return
 
-          return {
-            ...habit,
-            completedDates: newCompletedDates,
-            streak: isCompleted ? Math.max(0, habit.streak - 1) : habit.streak + 1,
-          }
-        }
-        return habit
-      }),
-    )
+    const isCompletedToday = habit.completedDates.includes(today)
+    const updatedHabit = {
+      ...habit,
+      completedDates: isCompletedToday
+        ? habit.completedDates.filter((date) => date !== today)
+        : [...habit.completedDates, today],
+    }
+
+    // Recalculate streak
+    const sortedDates = updatedHabit.completedDates.sort()
+    let streak = 0
+    let currentDate = new Date()
+
+    for (let i = sortedDates.length - 1; i >= 0; i--) {
+      const date = new Date(sortedDates[i])
+      const diffDays = Math.floor((currentDate.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
+
+      if (diffDays <= 1) {
+        streak++
+        currentDate = date
+      } else {
+        break
+      }
+    }
+
+    updatedHabit.streak = streak
+
+    setHabits(habits.map((h) => (h.id === habitId ? updatedHabit : h)))
+  }
+
+  const updateGoalStatus = (goalId: string, status: VisionGoal["status"]) => {
+    setGoals(goals.map((goal) => (goal.id === goalId ? { ...goal, status } : goal)))
   }
 
   const removeGoal = (id: string) => {
@@ -338,6 +272,27 @@ export default function VisionBoardPage() {
       default:
         return "bg-muted-foreground"
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading your vision board...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground">Please log in to access your vision board.</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -493,7 +448,7 @@ export default function VisionBoardPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <div className={`w-3 h-3 rounded-full ${getPriorityColor(goal.priority)}`}></div>
-                          <Button variant="ghost" size="sm" onClick={() => toggleGoalStatus(goal.id)}>
+                          <Button variant="ghost" size="sm" onClick={() => updateGoalStatus(goal.id, goal.status === "completed" ? "in-progress" : "completed")}>
                             {getStatusIcon(goal.status)}
                           </Button>
                         </div>

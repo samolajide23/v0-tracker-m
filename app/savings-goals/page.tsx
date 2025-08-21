@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSupabase } from "@/lib/supabase-context"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -69,64 +70,40 @@ const goalCategories = [
 ]
 
 export default function SavingsGoalsPage() {
-  const [goals, setGoals] = useState<SavingsGoal[]>([
-    {
-      id: "1",
-      name: "401(k) Retirement",
-      category: "Retirement",
-      targetAmount: 23000, // 2024 401k limit
-      currentAmount: 8500,
-      targetDate: "2024-12-31",
-      monthlyContribution: 1200,
-      color: "#8b5cf6",
-      icon: Building,
-    },
-    {
-      id: "2",
-      name: "House Down Payment",
-      category: "House",
-      targetAmount: 60000,
-      currentAmount: 15000,
-      targetDate: "2026-06-01",
-      monthlyContribution: 1500,
-      color: "#10b981",
-      icon: Home,
-    },
-    {
-      id: "3",
-      name: "New Car",
-      category: "Car",
-      targetAmount: 25000,
-      currentAmount: 8000,
-      targetDate: "2025-08-01",
-      monthlyContribution: 800,
-      color: "#06b6d4",
-      icon: Car,
-    },
-    {
-      id: "4",
-      name: "Europe Vacation",
-      category: "Travel",
-      targetAmount: 8000,
-      currentAmount: 2500,
-      targetDate: "2025-07-01",
-      monthlyContribution: 400,
-      color: "#ef4444",
-      icon: Plane,
-    },
-  ])
+  const { data, user, loading, updateSavingsGoals } = useSupabase()
+  const [goals, setGoals] = useState<SavingsGoal[]>([])
+  const [contributions, setContributions] = useState<Contribution[]>([])
 
-  const [contributions, setContributions] = useState<Contribution[]>([
-    { id: "1", goalId: "1", amount: 1200, date: "2024-01-01", description: "Monthly 401k contribution" },
-    { id: "2", goalId: "2", amount: 1500, date: "2024-01-01", description: "House fund deposit" },
-    { id: "3", goalId: "3", amount: 800, date: "2024-01-01", description: "Car savings" },
-    { id: "4", goalId: "4", amount: 400, date: "2024-01-01", description: "Vacation fund" },
-  ])
+  // Load data from Supabase context
+  useEffect(() => {
+    if (data?.savingsGoals) {
+      setGoals(data.savingsGoals.map(goal => ({
+        ...goal,
+        icon: goalCategories.find(cat => cat.name === goal.category)?.icon || Target
+      })))
+    }
+  }, [data?.savingsGoals])
+
+  const saveToDatabase = async (newGoals: SavingsGoal[]) => {
+    if (!user) return
+    
+    await updateSavingsGoals(newGoals.map(goal => ({
+      id: goal.id,
+      name: goal.name,
+      category: goal.category,
+      targetAmount: goal.targetAmount,
+      currentAmount: goal.currentAmount,
+      targetDate: goal.targetDate,
+      monthlyContribution: goal.monthlyContribution,
+      color: goal.color,
+    })))
+  }
 
   const [newGoal, setNewGoal] = useState({
     name: "",
-    category: "Other",
+    category: "Retirement",
     targetAmount: "",
+    currentAmount: "",
     targetDate: "",
     monthlyContribution: "",
   })
@@ -141,33 +118,22 @@ export default function SavingsGoalsPage() {
   const totalTarget = goals.reduce((sum, goal) => sum + goal.targetAmount, 0)
   const totalMonthlyContributions = goals.reduce((sum, goal) => sum + goal.monthlyContribution, 0)
 
-  // Calculate goal progress and projections
   const goalsWithProjections = goals.map((goal) => {
-    const progress = (goal.currentAmount / goal.targetAmount) * 100
-    const remaining = goal.targetAmount - goal.currentAmount
-    const targetDate = new Date(goal.targetDate)
-    const today = new Date()
-    const monthsRemaining = Math.max(
-      1,
-      (targetDate.getFullYear() - today.getFullYear()) * 12 + (targetDate.getMonth() - today.getMonth()),
+    const monthsToTarget = Math.ceil(
+      (new Date(goal.targetDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24 * 30.44)
     )
-    const requiredMonthly = remaining / monthsRemaining
-    const onTrack = goal.monthlyContribution >= requiredMonthly
-    const projectedCompletion = new Date()
-    projectedCompletion.setMonth(projectedCompletion.getMonth() + Math.ceil(remaining / goal.monthlyContribution))
+    const projectedAmount = goal.currentAmount + goal.monthlyContribution * monthsToTarget
+    const isOnTrack = projectedAmount >= goal.targetAmount
 
     return {
       ...goal,
-      progress,
-      remaining,
-      monthsRemaining,
-      requiredMonthly,
-      onTrack,
-      projectedCompletion,
+      monthsToTarget,
+      projectedAmount,
+      isOnTrack,
+      progressPercentage: Math.min((goal.currentAmount / goal.targetAmount) * 100, 100),
     }
   })
 
-  // Chart data
   const goalDistribution = goals.map((goal) => ({
     name: goal.name,
     value: goal.currentAmount,
@@ -175,60 +141,110 @@ export default function SavingsGoalsPage() {
   }))
 
   const progressData = goalsWithProjections.map((goal) => ({
-    name: goal.name.length > 15 ? goal.name.substring(0, 15) + "..." : goal.name,
+    name: goal.name,
     current: goal.currentAmount,
     target: goal.targetAmount,
-    progress: goal.progress,
+    projected: goal.projectedAmount,
   }))
 
-  const addGoal = () => {
-    if (newGoal.name && newGoal.targetAmount && newGoal.targetDate && newGoal.monthlyContribution) {
-      const category = goalCategories.find((cat) => cat.name === newGoal.category) || goalCategories[6]
-      const goal: SavingsGoal = {
-        id: Date.now().toString(),
-        name: newGoal.name,
-        category: newGoal.category,
-        targetAmount: Number.parseFloat(newGoal.targetAmount),
-        currentAmount: 0,
-        targetDate: newGoal.targetDate,
-        monthlyContribution: Number.parseFloat(newGoal.monthlyContribution),
-        color: category.color,
-        icon: category.icon,
-      }
-
-      setGoals([...goals, goal])
-      setNewGoal({ name: "", category: "Other", targetAmount: "", targetDate: "", monthlyContribution: "" })
+  const addGoal = async () => {
+    if (!newGoal.name || !newGoal.targetAmount || !newGoal.currentAmount || !newGoal.targetDate || !newGoal.monthlyContribution) {
+      return
     }
+
+    const targetAmount = Number.parseFloat(newGoal.targetAmount)
+    const currentAmount = Number.parseFloat(newGoal.currentAmount)
+    const monthlyContribution = Number.parseFloat(newGoal.monthlyContribution)
+
+    if (isNaN(targetAmount) || targetAmount <= 0 || isNaN(currentAmount) || currentAmount < 0 || isNaN(monthlyContribution) || monthlyContribution < 0) {
+      return
+    }
+
+    const category = goalCategories.find((cat) => cat.name === newGoal.category)
+    const goal: SavingsGoal = {
+      id: crypto.randomUUID(),
+      name: newGoal.name,
+      category: newGoal.category,
+      targetAmount,
+      currentAmount,
+      targetDate: newGoal.targetDate,
+      monthlyContribution,
+      color: category?.color || "#6366f1",
+      icon: category?.icon || Target,
+    }
+
+    const newGoals = [...goals, goal]
+    setGoals(newGoals)
+    await saveToDatabase(newGoals)
+
+    setNewGoal({
+      name: "",
+      category: "Retirement",
+      targetAmount: "",
+      currentAmount: "",
+      targetDate: "",
+      monthlyContribution: "",
+    })
   }
 
-  const addContribution = () => {
-    if (newContribution.goalId && newContribution.amount && newContribution.description) {
-      const contribution: Contribution = {
-        id: Date.now().toString(),
-        goalId: newContribution.goalId,
-        amount: Number.parseFloat(newContribution.amount),
-        date: new Date().toISOString().split("T")[0],
-        description: newContribution.description,
-      }
-
-      setContributions([...contributions, contribution])
-
-      // Update goal current amount
-      setGoals(
-        goals.map((goal) =>
-          goal.id === newContribution.goalId
-            ? { ...goal, currentAmount: goal.currentAmount + contribution.amount }
-            : goal,
-        ),
-      )
-
-      setNewContribution({ goalId: "", amount: "", description: "" })
+  const addContribution = async () => {
+    if (!newContribution.goalId || !newContribution.amount || !newContribution.description) {
+      return
     }
+
+    const amount = Number.parseFloat(newContribution.amount)
+    if (isNaN(amount) || amount <= 0) {
+      return
+    }
+
+    const contribution: Contribution = {
+      id: crypto.randomUUID(),
+      goalId: newContribution.goalId,
+      amount,
+      date: new Date().toISOString().split("T")[0],
+      description: newContribution.description,
+    }
+
+    const newContributions = [...contributions, contribution]
+    setContributions(newContributions)
+
+    const updatedGoals = goals.map((goal) =>
+      goal.id === newContribution.goalId
+        ? { ...goal, currentAmount: goal.currentAmount + amount }
+        : goal
+    )
+
+    setGoals(updatedGoals)
+    await saveToDatabase(updatedGoals)
+
+    setNewContribution({ goalId: "", amount: "", description: "" })
   }
 
-  const removeGoal = (id: string) => {
-    setGoals(goals.filter((goal) => goal.id !== id))
-    setContributions(contributions.filter((contribution) => contribution.goalId !== id))
+  const removeGoal = async (id: string) => {
+    const newGoals = goals.filter((goal) => goal.id !== id)
+    setGoals(newGoals)
+    await saveToDatabase(newGoals)
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading your savings goals...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground">Please log in to access your savings goals.</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -370,8 +386,8 @@ export default function SavingsGoalsPage() {
                           <IconComponent className="h-5 w-5" style={{ color: goal.color }} />
                           {goal.name}
                         </CardTitle>
-                        <Badge variant={goal.onTrack ? "default" : "destructive"}>
-                          {goal.onTrack ? "On Track" : "Behind"}
+                        <Badge variant={goal.isOnTrack ? "default" : "destructive"}>
+                          {goal.isOnTrack ? "On Track" : "Behind"}
                         </Badge>
                       </div>
                     </CardHeader>
@@ -380,7 +396,7 @@ export default function SavingsGoalsPage() {
                         <span>Saved: ${goal.currentAmount.toLocaleString()}</span>
                         <span>Goal: ${goal.targetAmount.toLocaleString()}</span>
                       </div>
-                      <Progress value={goal.progress} className="h-3" />
+                      <Progress value={goal.progressPercentage} className="h-3" />
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <div className="text-muted-foreground">Target Date</div>
@@ -392,21 +408,21 @@ export default function SavingsGoalsPage() {
                         </div>
                         <div>
                           <div className="text-muted-foreground">Required Monthly</div>
-                          <div className={`font-medium ${goal.onTrack ? "text-chart-4" : "text-destructive"}`}>
-                            ${goal.requiredMonthly.toLocaleString()}
+                          <div className={`font-medium ${goal.isOnTrack ? "text-chart-4" : "text-destructive"}`}>
+                            ${goal.monthlyContribution.toLocaleString()}
                           </div>
                         </div>
                         <div>
                           <div className="text-muted-foreground">Projected Completion</div>
-                          <div className="font-medium">{goal.projectedCompletion.toLocaleDateString()}</div>
+                          <div className="font-medium">{new Date(goal.targetDate).toLocaleDateString()}</div>
                         </div>
                       </div>
                       <div className="p-3 bg-muted/50 rounded-lg">
                         <div className="text-sm">
                           <span className="text-muted-foreground">Remaining: </span>
-                          <span className="font-medium">${goal.remaining.toLocaleString()}</span>
+                          <span className="font-medium">${goal.targetAmount - goal.currentAmount}</span>
                           <span className="text-muted-foreground"> in </span>
-                          <span className="font-medium">{goal.monthsRemaining} months</span>
+                          <span className="font-medium">{goal.monthsToTarget} months</span>
                         </div>
                       </div>
                     </CardContent>
@@ -558,12 +574,13 @@ export default function SavingsGoalsPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="goal-date">Target Date</Label>
+                    <Label htmlFor="goal-current">Current Amount</Label>
                     <Input
-                      id="goal-date"
-                      type="date"
-                      value={newGoal.targetDate}
-                      onChange={(e) => setNewGoal({ ...newGoal, targetDate: e.target.value })}
+                      id="goal-current"
+                      type="number"
+                      placeholder="0.00"
+                      value={newGoal.currentAmount}
+                      onChange={(e) => setNewGoal({ ...newGoal, currentAmount: e.target.value })}
                     />
                   </div>
                   <div>

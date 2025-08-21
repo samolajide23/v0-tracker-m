@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getStorageData, setStorageData } from "@/lib/storage"
+import { useSupabase } from "@/lib/supabase-context"
 import Navigation from "@/components/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -47,23 +47,33 @@ interface Contribution {
 }
 
 export default function EmergencyFundPage() {
+  const { data, user, loading, updateEmergencyFund } = useSupabase()
   const [currentBalance, setCurrentBalance] = useState(0)
   const [monthlyExpenses, setMonthlyExpenses] = useState(0)
   const [targetMonths, setTargetMonths] = useState(6)
   const [contributions, setContributions] = useState<Contribution[]>([])
 
+  // Load data from Supabase context
   useEffect(() => {
-    const data = getStorageData()
-    setCurrentBalance(data.emergencyFund?.currentBalance || 0)
-    setMonthlyExpenses(data.emergencyFund?.monthlyExpenses || 0)
-    setTargetMonths(data.emergencyFund?.targetMonths || 6)
-    setContributions(data.emergencyFund?.contributions || [])
-  }, [])
+    if (data?.emergencyFund) {
+      setCurrentBalance(data.emergencyFund.currentBalance || 0)
+      setMonthlyExpenses(data.emergencyFund.monthlyExpenses || 0)
+      setTargetMonths(data.emergencyFund.targetMonths || 6)
+      setContributions(data.emergencyFund.contributions || [])
+    }
+  }, [data?.emergencyFund])
 
-  const saveToStorage = (updates: any) => {
-    const data = getStorageData()
-    data.emergencyFund = { ...data.emergencyFund, ...updates }
-    setStorageData(data)
+  const saveToDatabase = async (updates: any) => {
+    if (!user) return
+    
+    const updatedFund = {
+      currentBalance: updates.currentBalance ?? currentBalance,
+      monthlyExpenses: updates.monthlyExpenses ?? monthlyExpenses,
+      targetMonths: updates.targetMonths ?? targetMonths,
+      contributions: updates.contributions ?? contributions,
+    }
+    
+    await updateEmergencyFund(updatedFund)
   }
 
   const [newContribution, setNewContribution] = useState({
@@ -94,51 +104,59 @@ export default function EmergencyFundPage() {
     return acc
   }, [] as any[])
 
-  const addContribution = () => {
-    if (newContribution.amount && newContribution.description) {
-      const amount = Number.parseFloat(newContribution.amount)
-      const contribution: Contribution = {
-        id: Date.now().toString(),
-        amount,
-        date: new Date().toISOString().split("T")[0],
-        type: newContribution.type,
-        description: newContribution.description,
-      }
-
-      const newContributions = [...contributions, contribution]
-      setContributions(newContributions)
-
-      const newBalance =
-        newContribution.type === "deposit" ? currentBalance + amount : Math.max(currentBalance - amount, 0)
-
-      setCurrentBalance(newBalance)
-
-      saveToStorage({
-        currentBalance: newBalance,
-        contributions: newContributions,
-        monthlyExpenses,
-        targetMonths,
-      })
-
-      setNewContribution({ amount: "", type: "deposit", description: "" })
+  const addContribution = async () => {
+    if (!newContribution.amount || !newContribution.description) {
+      return
     }
+
+    const amount = Number.parseFloat(newContribution.amount)
+    if (isNaN(amount) || amount <= 0) {
+      return
+    }
+
+    const contribution: Contribution = {
+      id: crypto.randomUUID(),
+      amount,
+      date: new Date().toISOString().split("T")[0],
+      type: newContribution.type,
+      description: newContribution.description,
+    }
+
+    const newContributions = [...contributions, contribution]
+    setContributions(newContributions)
+
+    const newBalance =
+      newContribution.type === "deposit" ? currentBalance + amount : Math.max(currentBalance - amount, 0)
+
+    setCurrentBalance(newBalance)
+
+    await saveToDatabase({
+      currentBalance: newBalance,
+      contributions: newContributions,
+      monthlyExpenses,
+      targetMonths,
+    })
+
+    setNewContribution({ amount: "", type: "deposit", description: "" })
   }
 
-  const updateSettings = () => {
+  const updateSettings = async () => {
     const newExpenses = Number.parseFloat(newMonthlyExpenses)
     const newTarget = Number.parseInt(newTargetMonths)
 
-    if (newExpenses > 0 && newTarget > 0) {
-      setMonthlyExpenses(newExpenses)
-      setTargetMonths(newTarget)
-
-      saveToStorage({
-        currentBalance,
-        contributions,
-        monthlyExpenses: newExpenses,
-        targetMonths: newTarget,
-      })
+    if (isNaN(newExpenses) || newExpenses <= 0 || isNaN(newTarget) || newTarget <= 0) {
+      return
     }
+
+    setMonthlyExpenses(newExpenses)
+    setTargetMonths(newTarget)
+
+    await saveToDatabase({
+      currentBalance,
+      contributions,
+      monthlyExpenses: newExpenses,
+      targetMonths: newTarget,
+    })
   }
 
   const getStatusColor = () => {
@@ -148,17 +166,32 @@ export default function EmergencyFundPage() {
     return "text-destructive"
   }
 
-  const getStatusIcon = () => {
-    if (monthsCovered >= targetMonths) return <CheckCircle className="h-5 w-5 text-chart-4" />
-    if (monthsCovered >= 3) return <Shield className="h-5 w-5 text-primary" />
-    return <AlertTriangle className="h-5 w-5 text-destructive" />
-  }
-
   const getStatusMessage = () => {
     if (monthsCovered >= targetMonths) return "Fully funded! You're financially secure."
-    if (monthsCovered >= 3) return "Good progress! You have basic emergency coverage."
-    if (monthsCovered >= 1) return "Getting started. Keep building your safety net."
-    return "Critical: Build your emergency fund immediately."
+    if (monthsCovered >= 3) return "Good progress! You have a solid safety net."
+    if (monthsCovered >= 1) return "Getting there! Keep building your emergency fund."
+    return "Start building your emergency fund today."
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading your emergency fund data...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground">Please log in to access your emergency fund.</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -183,7 +216,7 @@ export default function EmergencyFundPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  {getStatusIcon()}
+                  {monthsCovered >= targetMonths ? <CheckCircle className="h-5 w-5 text-chart-4" /> : null}
                   <div>
                     <h3 className="font-semibold text-lg">Emergency Fund Status</h3>
                     <p className="text-muted-foreground">{getStatusMessage()}</p>

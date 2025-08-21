@@ -182,7 +182,7 @@ export default function DebtPayoffPage() {
       const minimumPayment = Number.parseFloat(newDebt.minimumPayment)
 
       if (balance <= 0 || interestRate < 0 || minimumPayment <= 0) {
-        alert("Please enter valid positive numbers for all fields")
+        // Validation failed - invalid input
         return
       }
 

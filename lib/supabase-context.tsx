@@ -177,8 +177,6 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
 
   const loadUserData = async (userId: string) => {
     try {
-      console.log("Loading user data for:", userId)
-      
       // Try to load data with individual error handling for each table
       const incomesRes = await supabase.from("income_entries").select("*").eq("user_id", userId)
       const expensesRes = await supabase.from("expense_entries").select("*").eq("user_id", userId)
@@ -186,8 +184,6 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       const debtsRes = await supabase.from("debt_entries").select("*").eq("user_id", userId)
       const goalsRes = await supabase.from("savings_goals").select("*").eq("user_id", userId)
       const transactionsRes = await supabase.from("transactions").select("*").eq("user_id", userId).order("date", { ascending: false })
-
-      console.log("Database responses:", { incomesRes, expensesRes, emergencyRes, debtsRes, goalsRes, transactionsRes })
 
       setData({
         incomes: (incomesRes.data || []).map(income => ({
@@ -335,12 +331,9 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
   }
 
   const signIn = async (email: string, password: string) => {
-    console.log("Attempting to sign in with:", email)
     const result = await supabase.auth.signInWithPassword({ email, password })
-    console.log("Sign in result:", result)
     
     if (!result.error && result.data.session) {
-      console.log("Sign in successful, session:", result.data.session)
       setUser(result.data.session.user)
       await loadUserData(result.data.session.user.id)
     }

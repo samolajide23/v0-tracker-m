@@ -30,7 +30,6 @@ export default function LoginPage() {
       if (error) {
         setError(error.message)
       } else if (data.session) {
-        console.log("Login successful, redirecting...")
         // Add a small delay to ensure the session is properly set
         setTimeout(() => {
           router.push("/")
@@ -39,7 +38,6 @@ export default function LoginPage() {
         setError("Login failed. Please try again.")
       }
     } catch (err) {
-      console.error("Login error:", err)
       setError("An unexpected error occurred. Please try again.")
     } finally {
       setLoading(false)

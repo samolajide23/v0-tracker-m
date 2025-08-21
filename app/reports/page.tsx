@@ -612,59 +612,31 @@ export default function ReportsPage() {
 
               {/* Debt Summary */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Credit Card Debt</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-destructive">$4,000</div>
-                    <div className="text-sm text-muted-foreground mt-1">
-                      <span className="text-chart-4">-$1,000</span> this year
-                    </div>
-                    <div className="mt-2">
-                      <div className="text-xs text-muted-foreground">Progress</div>
-                      <div className="w-full bg-muted rounded-full h-2 mt-1">
-                        <div className="bg-chart-4 h-2 rounded-full" style={{ width: "20%" }}></div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Car Loan</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-destructive">$13,250</div>
-                    <div className="text-sm text-muted-foreground mt-1">
-                      <span className="text-chart-4">-$1,750</span> this year
-                    </div>
-                    <div className="mt-2">
-                      <div className="text-xs text-muted-foreground">Progress</div>
-                      <div className="w-full bg-muted rounded-full h-2 mt-1">
-                        <div className="bg-chart-4 h-2 rounded-full" style={{ width: "12%" }}></div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Student Loan</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-destructive">$23,600</div>
-                    <div className="text-sm text-muted-foreground mt-1">
-                      <span className="text-chart-4">-$1,400</span> this year
-                    </div>
-                    <div className="mt-2">
-                      <div className="text-xs text-muted-foreground">Progress</div>
-                      <div className="w-full bg-muted rounded-full h-2 mt-1">
-                        <div className="bg-chart-4 h-2 rounded-full" style={{ width: "6%" }}></div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                {debtPayoff.length > 0 ? (
+                  debtPayoff.map((debt, index) => (
+                    <Card key={debt.id || index}>
+                      <CardHeader>
+                        <CardTitle className="text-lg">{debt.name}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-destructive">${debt.balance.toLocaleString()}</div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          Interest Rate: {debt.interestRate}%
+                        </div>
+                        <div className="mt-2">
+                          <div className="text-xs text-muted-foreground">Minimum Payment</div>
+                          <div className="text-sm font-medium">${debt.minimumPayment.toLocaleString()}/month</div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                ) : (
+                  <Card className="col-span-3">
+                    <CardContent className="text-center py-8">
+                      <p className="text-muted-foreground">No debt data available</p>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </TabsContent>
           </Tabs>

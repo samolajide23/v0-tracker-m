@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
-import { getStorageData, setStorageData } from "@/lib/storage"
+import { useState, useMemo } from "react"
+import { useSupabase } from "@/lib/supabase-context"
 import Navigation from "@/components/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -44,21 +44,53 @@ interface PayoffPlan {
 }
 
 export default function DebtPayoffPage() {
-  const [debts, setDebts] = useState<Debt[]>([])
+  const { data, user, loading, updateDebts } = useSupabase()
   const [strategy, setStrategy] = useState<"avalanche" | "snowball">("avalanche")
   const [extraPayment, setExtraPayment] = useState(0)
 
-  useEffect(() => {
-    const data = getStorageData()
-    setDebts(data.debts?.list || [])
-    setStrategy(data.debts?.strategy || "avalanche")
-    setExtraPayment(data.debts?.extraPayment || 0)
-  }, [])
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading your debt data...</p>
+        </div>
+      </div>
+    )
+  }
 
-  const saveToStorage = (updates: any) => {
-    const data = getStorageData()
-    data.debts = { ...data.debts, ...updates }
-    setStorageData(data)
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground">Please log in to access your debt payoff system.</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Convert Supabase debt data to local format
+  const debts: Debt[] = (data?.debts || []).map((debt, index) => ({
+    id: debt.id,
+    name: debt.name,
+    type: debt.type,
+    balance: debt.balance,
+    interestRate: debt.interestRate,
+    minimumPayment: debt.minimumPayment,
+    color: debtColors[index % debtColors.length],
+  }))
+
+  const saveToDatabase = async (newDebts: Debt[]) => {
+    if (!user) return
+    
+    await updateDebts(newDebts.map(debt => ({
+      id: debt.id,
+      name: debt.name,
+      balance: debt.balance,
+      interestRate: debt.interestRate,
+      minimumPayment: debt.minimumPayment,
+      type: debt.type,
+    })))
   }
 
   const [newDebt, setNewDebt] = useState({
@@ -143,7 +175,7 @@ export default function DebtPayoffPage() {
     return data
   }, [totalDebt, totalMinimumPayments, extraPayment, payoffTimeMonths])
 
-  const addDebt = () => {
+  const addDebt = async () => {
     if (newDebt.name && newDebt.balance && newDebt.interestRate && newDebt.minimumPayment) {
       const balance = Number.parseFloat(newDebt.balance)
       const interestRate = Number.parseFloat(newDebt.interestRate)
@@ -155,7 +187,7 @@ export default function DebtPayoffPage() {
       }
 
       const debt: Debt = {
-        id: Date.now().toString(),
+        id: crypto.randomUUID(),
         name: newDebt.name,
         type: newDebt.type,
         balance,
@@ -165,43 +197,25 @@ export default function DebtPayoffPage() {
       }
 
       const newDebts = [...debts, debt]
-      setDebts(newDebts)
-      saveToStorage({
-        list: newDebts,
-        strategy,
-        extraPayment,
-      })
+      await saveToDatabase(newDebts)
 
       setNewDebt({ name: "", type: "Credit Card", balance: "", interestRate: "", minimumPayment: "" })
     }
   }
 
-  const removeDebt = (id: string) => {
+  const removeDebt = async (id: string) => {
     const newDebts = debts.filter((debt) => debt.id !== id)
-    setDebts(newDebts)
-    saveToStorage({
-      list: newDebts,
-      strategy,
-      extraPayment,
-    })
+    await saveToDatabase(newDebts)
   }
 
   const updateStrategy = (newStrategy: "avalanche" | "snowball") => {
     setStrategy(newStrategy)
-    saveToStorage({
-      list: debts,
-      strategy: newStrategy,
-      extraPayment,
-    })
+    // Strategy and extra payment are local state only
   }
 
   const updateExtraPayment = (amount: number) => {
     setExtraPayment(amount)
-    saveToStorage({
-      list: debts,
-      strategy,
-      extraPayment: amount,
-    })
+    // Strategy and extra payment are local state only
   }
 
   const calculateSavings = () => {

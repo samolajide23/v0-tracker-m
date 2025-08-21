@@ -44,14 +44,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import Navigation from "@/components/navigation"
-import { useFinancialData } from "@/lib/data-context"
-import {
-  exportFinancialData,
-  importFinancialData,
-  clearAllData,
-  calculateTotalMonthlyIncome,
-  calculateTotalMonthlyExpenses,
-} from "@/lib/storage"
+import { useSupabase } from "@/lib/supabase-context"
 
 export default function ReportsPage() {
   const [selectedPeriod, setSelectedPeriod] = useState("12months")
@@ -61,24 +54,43 @@ export default function ReportsPage() {
     message: "",
   })
 
-  const { data, refreshData } = useFinancialData()
+  const { data, loading } = useSupabase()
 
-  const monthlyIncome = calculateTotalMonthlyIncome(data.income)
-  const monthlyExpenses = calculateTotalMonthlyExpenses(data.expenses)
-  const totalSavings = data.savingsGoals?.reduce((sum, goal) => sum + goal.currentAmount, 0) || 0
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading your financial data...</p>
+        </div>
+      </div>
+    )
+  }
+
+  const monthlyIncome = (data?.incomes || []).reduce((sum, income) => {
+    const multiplier = income.frequency === "weekly" ? 4.33 : income.frequency === "yearly" ? 1 / 12 : 1
+    return sum + (income.amount || 0) * multiplier
+  }, 0)
+
+  const monthlyExpenses = (data?.expenses || []).reduce((sum, expense) => {
+    const multiplier = expense.frequency === "weekly" ? 4.33 : expense.frequency === "yearly" ? 1 / 12 : 1
+    return sum + (expense.amount || 0) * multiplier
+  }, 0)
+
+  const totalSavings = (data?.savingsGoals || []).reduce((sum, goal) => sum + (goal.currentAmount || 0), 0)
   const savingsRate = monthlyIncome > 0 ? ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100 : 0
-  const emergencyFund = data.emergencyFund?.currentBalance || 0
-  const totalDebt = data.debts?.list?.reduce((sum, debt) => sum + debt.balance, 0) || 0
+  const emergencyFund = data?.emergencyFund?.currentBalance || 0
+  const totalDebt = (data?.debts || []).reduce((sum, debt) => sum + (debt.balance || 0), 0)
 
-  const expenseCategories = data.expenses.reduce(
+  const expenseCategories = (data?.expenses || []).reduce(
     (acc, expense) => {
       const existing = acc.find((cat) => cat.name === expense.category)
       if (existing) {
-        existing.value += expense.amount
+        existing.value += expense.amount || 0
       } else {
         acc.push({
           name: expense.category,
-          value: expense.amount,
+          value: expense.amount || 0,
           color: `hsl(${Math.random() * 360}, 70%, 50%)`,
         })
       }
@@ -88,14 +100,14 @@ export default function ReportsPage() {
   )
 
   const goalProgress =
-    data.savingsGoals?.map((goal) => ({
+    (data?.savingsGoals || []).map((goal) => ({
       name: goal.name,
       target: goal.targetAmount,
       current: goal.currentAmount,
       progress: goal.targetAmount > 0 ? Math.round((goal.currentAmount / goal.targetAmount) * 100) : 0,
-    })) || []
+    }))
 
-  const monthlyData = data.transactions
+  const monthlyData = (data?.transactions || [])
     .reduce((acc, transaction) => {
       const month = new Date(transaction.date).toLocaleDateString("en-US", { month: "short", year: "numeric" })
       const existing = acc.find((item) => item.month === month)
@@ -125,13 +137,13 @@ export default function ReportsPage() {
     .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime())
 
   const debtPayoff =
-    data.debts?.list?.map((debt) => ({
+    (data?.debts || []).map((debt) => ({
       name: debt.name,
       balance: debt.balance,
       type: debt.type,
       interestRate: debt.interestRate,
       minimumPayment: debt.minimumPayment,
-    })) || []
+    }))
 
   const exportToCSV = (data: any[], filename: string) => {
     const csvContent = [Object.keys(data[0]).join(","), ...data.map((row) => Object.values(row).join(","))].join("\n")
@@ -158,7 +170,7 @@ export default function ReportsPage() {
   }
 
   const exportAllData = () => {
-    const dataStr = exportFinancialData()
+    const dataStr = JSON.stringify(data, null, 2)
     const blob = new Blob([dataStr], { type: "application/json" })
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement("a")
@@ -169,43 +181,12 @@ export default function ReportsPage() {
   }
 
   const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const jsonData = e.target?.result as string
-        const success = importFinancialData(jsonData)
-
-        if (success) {
-          setImportStatus({ type: "success", message: "Data imported successfully! Refreshing..." })
-          setTimeout(() => {
-            refreshData()
-            setImportStatus({ type: null, message: "" })
-          }, 2000)
-        } else {
-          setImportStatus({ type: "error", message: "Failed to import data. Please check the file format." })
-        }
-      } catch (error) {
-        setImportStatus({ type: "error", message: "Invalid file format. Please select a valid backup file." })
-      }
-    }
-    reader.readAsText(file)
-
-    // Reset the input
+    setImportStatus({ type: "error", message: "Import functionality not available with Supabase backend." })
     event.target.value = ""
   }
 
   const handleClearAllData = () => {
-    if (window.confirm("Are you sure you want to clear all financial data? This action cannot be undone.")) {
-      clearAllData()
-      setImportStatus({ type: "success", message: "All data cleared successfully! Refreshing..." })
-      setTimeout(() => {
-        refreshData()
-        setImportStatus({ type: null, message: "" })
-      }, 2000)
-    }
+    setImportStatus({ type: "error", message: "Clear data functionality not available with Supabase backend." })
   }
 
   return (
@@ -309,7 +290,7 @@ export default function ReportsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-chart-4">${monthlyIncome.toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-1">From {data.income.length} sources</div>
+                <div className="text-xs text-muted-foreground mt-1">From {data?.incomes?.length || 0} sources</div>
               </CardContent>
             </Card>
 
@@ -320,7 +301,7 @@ export default function ReportsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-destructive">${monthlyExpenses.toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-1">{data.expenses.length} expense items</div>
+                <div className="text-xs text-muted-foreground mt-1">{data?.expenses?.length || 0} expense items</div>
               </CardContent>
             </Card>
 
@@ -344,7 +325,7 @@ export default function ReportsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-chart-4">${totalSavings.toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-1">Across {data.savingsGoals?.length || 0} goals</div>
+                <div className="text-xs text-muted-foreground mt-1">Across {data?.savingsGoals?.length || 0} goals</div>
               </CardContent>
             </Card>
           </div>

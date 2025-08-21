@@ -335,7 +335,17 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
   }
 
   const signIn = async (email: string, password: string) => {
-    return await supabase.auth.signInWithPassword({ email, password })
+    console.log("Attempting to sign in with:", email)
+    const result = await supabase.auth.signInWithPassword({ email, password })
+    console.log("Sign in result:", result)
+    
+    if (!result.error && result.data.session) {
+      console.log("Sign in successful, session:", result.data.session)
+      setUser(result.data.session.user)
+      await loadUserData(result.data.session.user.id)
+    }
+    
+    return result
   }
 
   const signUp = async (email: string, password: string) => {

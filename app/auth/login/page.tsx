@@ -24,15 +24,26 @@ export default function LoginPage() {
     setLoading(true)
     setError("")
 
-    const { error } = await signIn(email, password)
+    try {
+      const { error, data } = await signIn(email, password)
 
-    if (error) {
-      setError(error.message)
-    } else {
-      router.push("/")
+      if (error) {
+        setError(error.message)
+      } else if (data.session) {
+        console.log("Login successful, redirecting...")
+        // Add a small delay to ensure the session is properly set
+        setTimeout(() => {
+          router.push("/")
+        }, 500)
+      } else {
+        setError("Login failed. Please try again.")
+      }
+    } catch (err) {
+      console.error("Login error:", err)
+      setError("An unexpected error occurred. Please try again.")
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   return (
